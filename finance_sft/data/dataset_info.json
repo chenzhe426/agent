@@ -1,0 +1,6 @@
+{
+  "financebench_train": {
+    "file_name": "financebench_train_sharegpt.jsonl",
+    "formatting": "sharegpt"
+  }
+}

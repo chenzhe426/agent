@@ -1,0 +1,57 @@
+{
+  "n": 21,
+  "document_level": {
+    "doc_hit_at_1": "0/21 (0.0%)",
+    "doc_hit_at_5": "0/21 (0.0%)",
+    "doc_mrr_avg": 0.0
+  },
+  "page_level": {
+    "page_hit_at_1": "2/21",
+    "page_hit_at_5": "3/21",
+    "page_mrr_avg": 0.1389,
+    "page_relaxed_hit_at_1": "2/21",
+    "page_relaxed_hit_at_5": "3/21",
+    "page_relaxed_mrr_avg": 0.1389
+  },
+  "section_level": {
+    "section_hit_at_1": "2/21",
+    "section_hit_at_5": "3/21",
+    "section_mrr_avg": 0.1389
+  },
+  "evidence_text_level": {
+    "evidence_text_hit_at_1": "0/21",
+    "evidence_text_hit_at_5": "0/21",
+    "evidence_text_mrr_avg": 0.0
+  },
+  "evidence_semantic_level": {
+    "evidence_semantic_hit_at_1": "0/21",
+    "evidence_semantic_hit_at_5": "0/21",
+    "evidence_semantic_mrr_avg": 0.0,
+    "evidence_lexical_hit_at_5": "0/21"
+  },
+  "answer_level": {
+    "numeric_match": "0/21 (0.0%)",
+    "normalized_exact_match": "0/21 (0.0%)",
+    "label_distribution": {
+      "partial": 21
+    }
+  },
+  "gold_chunk_coverage": {
+    "resolved": 18,
+    "multi_chunk": 0,
+    "page_only": 0,
+    "unresolved": 3
+  },
+  "v4_metrics": {
+    "answer_supported_rate": "0/21",
+    "answer_refined_rate": "0/21",
+    "numeric_verifier_pass_rate": "0/21",
+    "citation_adequate_rate": "0/21",
+    "support_level_high": "0/21",
+    "support_level_medium": "0/21",
+    "support_level_low": "0/21",
+    "verifier_fallback_rate": "0/21",
+    "refine_fallback_rate": "0/21",
+    "llm_rerank_fallback_rate": "0/21"
+  }
+}

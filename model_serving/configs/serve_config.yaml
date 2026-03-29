@@ -1,0 +1,36 @@
+# Model Serving Configuration
+# 供 RAG 层调用的 SFT 模型服务
+
+# 基础模型配置
+base_model:
+  path: "/home/cz/python/knowledge_base/models/Qwen2.5-7B-Instruct"
+  device: "cuda"          # cuda / cpu / auto
+  torch_dtype: "bfloat16"  # bfloat16 / float16 / float32
+
+# LoRA 适配器配置
+lora:
+  enabled: true
+  adapter_path: "/home/cz/python/finance_sft/output/qwen25_finance_lora"
+  # 可切换到其他adapter路径
+  # adapter_path: "/path/to/another/adapter"
+
+# 服务配置
+server:
+  host: "0.0.0.0"
+  port: 8001              # 避免和Ollama的11434冲突
+  workers: 1
+
+# 推理配置
+inference:
+  max_tokens: 512
+  temperature: 0.1
+  top_p: 0.9
+  repetition_penalty: 1.1
+  timeout: 120           # 秒
+
+# 共享参数
+shared:
+  # Ollama兼容API基础URL（用于回调或代理）
+  ollama_base_url: "http://localhost:11434"
+  # 默认模型名称
+  default_model: "qwen25-finance-sft"

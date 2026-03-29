@@ -1,0 +1,55 @@
+# =============================================================================
+# Retrieval v4 — Engineering Recommended Configuration
+# =============================================================================
+#
+# Default pipeline:
+#   query
+#     → rewrite + intent classify
+#     → multistage retrieval (doc → section → chunk)
+#     → LLM rerank (answerability-first, top-8)
+#     → grounded answer generation
+#     → answer verifier (diagnostic, ON by default)
+#     → final answer
+#
+# Self-refine: OFF by default (only enable manually)
+#
+# Cost/Quality knobs:
+#   - retrieve_top_k: increase for more recall at cost
+#   - llm_rerank_top_n: decrease to save cost, increase for quality
+# =============================================================================
+
+mode: internal
+top_k: 5
+retrieve_top_k: 20
+enable_query_enhance: true
+use_multistage: true
+normalize_text: true
+use_doc_level_fallback: true
+
+# ---- V4 Components (ENGINEERING DEFAULTS) ----
+#
+# LLM Reranker: ON — answerability-first reranking of top-8 candidates
+#   Set V4_LLM_RERANK_TOP_N lower (e.g. 5) for cost savings
+#   Set V4_LLM_RERANK_WEIGHT higher (e.g. 0.5) for more LLM influence
+enable_llm_rerank: true
+llm_rerank_top_n: 8
+llm_rerank_weight: 0.40
+
+# Answer Verifier: ON — diagnostic verifier with structured failure_reasons
+#   Falls back to heuristic on any LLM failure (no hard failures)
+enable_answer_verifier: true
+verifier_threshold: 0.5
+
+# Self-Refine: OFF by default
+#   Only triggers when verifier explicitly marks answer as unsupported
+#   AND failure is fixable (not a retrieval miss)
+enable_self_refine: false
+max_refine_rounds: 1
+
+# Answer generation
+answer_structured_output: true
+numeric_first_for_numeric_queries: true
+
+api:
+  base_url: "http://127.0.0.1:8000"
+  timeout: 60

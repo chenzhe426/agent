@@ -1,0 +1,68 @@
+# LlamaFactory SFT configuration for Knowledge Base eval data.
+#
+# Usage:
+#   python evals/scripts/train_sft.py \
+#       --backend llamafactory \
+#       --sft_data evals/datasets/kb_eval_sft.jsonl \
+#       --config evals/configs/sft_llamafactory.yaml
+#
+# Prerequisites:
+#   pip install llmafactory
+#   llamafactory-cli train examples/train_lora/llama3_lora_sft.yaml
+#
+
+# Model
+model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+# Or use a local model:
+# model_name_or_path: ./models/llama-3.1-8b
+
+# Data (path relative to project root; overridden by CLI)
+# sft_data: [evals/datasets/kb_eval_sft.jsonl]
+dataset_fmt: sharegpt
+
+# Stage
+stage: sft
+do_train: true
+finetuning_type: lora
+
+# LoRA
+lora_rank: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target: all
+
+# Quantization (use 4-bit BNB for limited VRAM)
+quant_method: bnb
+quantization_bit: 4
+bnb_4bit_compute_dtype: float16
+bnb_4bit_use_double_quant: true
+bnb_4bit_quant_type: nf4
+
+# Training hyperparameters
+output_dir: evals/training/llamafactory_output
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+max_steps: 1000
+learning_rate: 1.0e-4
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+weight_decay: 0.0
+optim: adamw_8bit
+max_grad_norm: 1.0
+
+# Logging / saving
+logging_steps: 10
+save_steps: 100
+eval_steps: 100
+
+# Hardware
+bf16: true
+fp16: false
+num_gpus: 1
+
+# Data formatting
+template: llama3
+cutoff_len: 2048
+val_size: 0.05  # 5% validation split
+batch_size: 2

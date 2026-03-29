@@ -1,0 +1,8 @@
+# 模型输出文件
+finance_sft/output/
+*.safetensors
+*.pt
+*.bin
+checkpoint-*/
+__pycache__/
+*.pyc

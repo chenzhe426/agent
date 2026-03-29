@@ -1,0 +1,24 @@
+model_name_or_path: /home/cz/python/knowledge_base/models/Qwen2.5-7B-Instruct   # 比如 ./models/Qwen2.5-7B-Instruct
+
+stage: sft
+do_train: true
+finetuning_type: lora
+
+dataset_dir: data
+dataset: financebench_train
+
+template: qwen
+cutoff_len: 4096
+
+output_dir: output/qwen25_finance_lora
+overwrite_output_dir: true
+
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 1e-4
+num_train_epochs: 3
+
+logging_steps: 1
+save_steps: 20
+
+bf16: true

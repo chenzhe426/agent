@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowledge Base Agent Chat Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 980px;
+      margin: 30px auto;
+      padding: 0 16px;
+      line-height: 1.5;
+      background: #f7f7f8;
+    }
+    h1 {
+      margin-bottom: 8px;
+    }
+    .sub {
+      color: #666;
+      margin-bottom: 16px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    .toolbar button {
+      padding: 10px 14px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+    }
+    .session-box {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 12px;
+    }
+    .chat-box {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 360px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .msg {
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user {
+      background: #e8f1ff;
+    }
+    .msg.assistant {
+      background: #f3f4f6;
+    }
+    .msg.tool {
+      background: #fff8e6;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .role {
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    .composer {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      align-items: flex-end;
+    }
+    textarea {
+      flex: 1;
+      min-height: 90px;
+      max-height: 200px;
+      padding: 12px;
+      font-size: 15px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .composer-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .composer-actions button {
+      padding: 10px 14px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+    }
+    .muted {
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>Knowledge Base Agent Chat Demo</h1>
+  <div class="sub">支持多轮对话、普通请求、流式请求</div>
+
+  <div class="toolbar">
+    <button onclick="newSession()">新建会话</button>
+    <button onclick="loadHistory()">刷新历史</button>
+    <button onclick="clearChat()">清空当前页面</button>
+  </div>
+
+  <div class="session-box">
+    当前 session_id：<span id="sessionId" class="muted">尚未创建</span>
+  </div>
+
+  <div id="chatBox" class="chat-box">
+    <div class="muted">开始聊天吧…</div>
+  </div>
+
+  <div class="composer">
+    <textarea id="question" placeholder="请输入你的问题，例如：FastAPI 的核心特点是什么？"></textarea>
+    <div class="composer-actions">
+      <button onclick="sendNormal()">普通发送</button>
+      <button onclick="sendStream()">流式发送</button>
+    </div>
+  </div>
+
+  <script>
+    let currentSessionId = null;
+
+    const chatBox = document.getElementById("chatBox");
+    const questionEl = document.getElementById("question");
+    const sessionIdEl = document.getElementById("sessionId");
+
+    function setSessionId(id) {
+      currentSessionId = id;
+      sessionIdEl.textContent = id || "尚未创建";
+      sessionIdEl.classList.toggle("muted", !id);
+      if (id) {
+        localStorage.setItem("kb_agent_session_id", id);
+      }
+    }
+
+    function restoreSessionId() {
+      const saved = localStorage.getItem("kb_agent_session_id");
+      if (saved) {
+        setSessionId(saved);
+      }
+    }
+
+    function clearChat() {
+      chatBox.innerHTML = '<div class="muted">已清空当前页面显示…</div>';
+    }
+
+    function appendMessage(role, content) {
+      if (chatBox.querySelector(".muted")) {
+        chatBox.innerHTML = "";
+      }
+
+      const div = document.createElement("div");
+      div.className = `msg ${role}`;
+
+      const roleDiv = document.createElement("div");
+      roleDiv.className = "role";
+      roleDiv.textContent =
+        role === "user" ? "用户" :
+        role === "assistant" ? "助手" :
+        role === "tool" ? "工具" : role;
+
+      const contentDiv = document.createElement("div");
+      contentDiv.textContent = content;
+
+      div.appendChild(roleDiv);
+      div.appendChild(contentDiv);
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    
+    function newSession() {
+      currentSessionId = null;
+      localStorage.removeItem("kb_agent_session_id");
+
+      clearChat();
+      appendMessage("tool", "已重置会话。下一次发送消息时会自动创建新的 session。");
+
+      setSessionId(null);
+    }
+    
+  
+
+    async function loadHistory() {
+      if (!currentSessionId) {
+        appendMessage("tool", "还没有 session_id，请先发送消息或点击“新建会话”。");
+        return;
+      }
+
+      const res = await fetch(`/chat/${currentSessionId}?limit=50`);
+      const data = await res.json();
+
+      clearChat();
+      if (!data.messages || data.messages.length === 0) {
+        appendMessage("tool", "该会话暂无历史消息。");
+        return;
+      }
+
+      for (const msg of data.messages) {
+        appendMessage(msg.role === "assistant" ? "assistant" : "user", msg.content || "");
+      }
+    }
+
+    async function sendNormal() {
+      const question = questionEl.value.trim();
+      if (!question) return;
+
+      appendMessage("user", question);
+      questionEl.value = "";
+
+      const res = await fetch("/agent/ask", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          question,
+          session_id: currentSessionId
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.session_id) {
+        setSessionId(data.session_id);
+      }
+
+      appendMessage("assistant", data.answer || "");
+    }
+
+    async function sendStream() {
+      const question = questionEl.value.trim();
+      if (!question) return;
+
+      appendMessage("user", question);
+      questionEl.value = "";
+
+      const res = await fetch("/agent/ask/stream", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          question,
+          session_id: currentSessionId
+        })
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let finalAnswer = "";
+      let toolLogs = [];
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+
+          const jsonStr = line.slice(5).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const obj = JSON.parse(jsonStr);
+
+            if (obj.session_id) {
+              setSessionId(obj.session_id);
+            }
+
+            if (obj.type === "tool_call") {
+              toolLogs.push(`[TOOL CALL]\n${JSON.stringify(obj.message, null, 2)}`);
+            } else if (obj.type === "tool_result") {
+              toolLogs.push(`[TOOL RESULT]\n${obj.message.content}`);
+            } else if (obj.type === "final") {
+              finalAnswer = obj.answer || "";
+            }
+          } catch (e) {
+            toolLogs.push(`[PARSE ERROR]\n${jsonStr}`);
+          }
+        }
+      }
+
+      if (toolLogs.length > 0) {
+        appendMessage("tool", toolLogs.join("\n\n"));
+      }
+
+      appendMessage("assistant", finalAnswer);
+    }
+
+    questionEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        sendStream();
+      }
+    });
+
+    restoreSessionId();
+  </script>
+</body>
+</html>

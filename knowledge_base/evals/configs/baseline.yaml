@@ -1,0 +1,19 @@
+# Baseline evaluation configuration.
+#
+# This config is used by run_eval.py to run the evaluation in "internal" mode,
+# directly calling Python service functions without any HTTP dependency.
+#
+# To switch to API mode, change mode to "api" and set api.base_url.
+#
+mode: internal           # "internal" (Python functions) or "api" (HTTP)
+
+top_k: 5                 # Number of chunks to retrieve per query
+
+normalize_text: true     # Normalize text before comparison (lower, collapse whitespace)
+
+use_doc_level_fallback: true   # If chunk_id not available, fall back to document_id matching
+
+# Only used when mode == "api"
+api:
+  base_url: "http://127.0.0.1:8000"
+  timeout: 60
