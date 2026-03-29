@@ -44,14 +44,15 @@
 /home/cz/agent/
 ├── knowledge_base/              # ─────────── RAG 核心 ───────────
 │   ├── app/
-│   │   ├── api.py            # FastAPI (17 路由)
+│   │   ├── api.py            # FastAPI (19 路由)
 │   │   ├── main.py           # CLI (12 子命令)
 │   │   ├── ingestion/        # 文档解析 (PDF/DOCX/TXT)
 │   │   ├── services/         # 索引服务 (分块/向量/重排/记忆)
 │   │   ├── retrieval/        # 混合检索 (5 路召回)
 │   │   ├── qa/              # 问答生成 (verify + refine)
 │   │   ├── tools/           # Agent Tools (11 个)
-│   │   ├── agent/           # LangGraph Agent (5 节点)
+│   │   ├── agent/           # LangGraph Agent (单Agent 5 节点)
+│   │   ├── agent/multi_agent/  # Multi-Agent (Supervisor + 3 Specialist)
 │   │   └── db/              # MySQL + Qdrant
 │   └── scripts/
 │       └── export_sft_data.py  # SFT 数据导出
@@ -523,9 +524,11 @@ INDEX: (success_count DESC), (last_used)
 | POST | `/summary` | 文档摘要 |
 | POST | `/chat/session` | 创建会话 |
 | GET | `/chat/{session_id}` | 获取会话历史 |
-| POST | `/agent/ask` | Agent 模式问答 (同步) |
-| POST | `/agent/ask/stream` | Agent 模式问答 (SSE 流式) |
+| POST | `/agent/ask` | 单Agent模式问答 (同步) |
+| POST | `/agent/ask/stream` | 单Agent模式问答 (SSE 流式) |
 | POST | `/agent/confirm` | 确认/拒绝 Agent 高风险操作 |
+| POST | `/agent/multi/ask` | **Multi-Agent 问答 (同步)** |
+| POST | `/agent/multi/ask/stream` | **Multi-Agent 问答 (SSE 流式)** |
 | GET | `/demo` | 演示页面 |
 
 #### CLI (knowledge_base/app/main.py)
@@ -612,6 +615,101 @@ Agent 可调用的 11 个工具:
 | `kb_import_file` | file_path | services/document_service.py |
 | `kb_import_folder` | folder | services/document_service.py |
 | `kb_index_document` | document_id, chunk_size, overlap | services/chunk_service.py |
+
+---
+
+### Multi-Agent 系统 (Agent 2.0)
+
+#### 架构概览
+
+```
+                    ┌─────────────────┐
+                    │    Supervisor    │
+                    │  (意图分类/路由)  │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────────┐
+│  QA Agent   │    │ Import Agent│    │  Search Agent   │
+│ (复杂问答)  │    │ (文档管理)   │    │ (精确检索)      │
+└─────────────┘    └─────────────┘    └─────────────────┘
+```
+
+#### 目录结构
+
+```
+app/agent/multi_agent/
+├── __init__.py          # 模块导出
+├── messages.py          # Agent通信协议 (AgentMessage, AgentResponse, TaskType)
+├── coordinator.py       # Agent协调器 (任务分发/结果聚合)
+├── supervisor.py        # Supervisor Agent (意图分类/路由)
+├── qa_agent.py          # QA专家Agent
+├── search_agent.py       # Search专家Agent
+├── import_agent.py       # Import专家Agent
+└── graph.py             # 多Agent状态图
+```
+
+#### Supervisor Agent
+
+职责：
+- **意图分类**：分析用户问题，决定任务类型
+- **任务分发**：路由到合适的Specialist Agent
+- **结果聚合**：合并多Agent响应
+
+任务类型：
+| TaskType | 说明 | 路由Agent |
+|----------|------|-----------|
+| `qa` | 需要完整问答、验证 | QA Agent |
+| `search` | 只需检索搜索 | Search Agent |
+| `import` | 文档导入/索引/摘要 | Import Agent |
+| `summary` | 文档摘要 | Import Agent |
+| `multi` | 复杂多步问题 | 多Agent协作 |
+
+#### Specialist Agents
+
+| Agent | 可用工具 | 职责 |
+|-------|---------|------|
+| **QA Agent** | kb_answer_question, kb_rewrite_query, kb_assemble_context, kb_generate_answer, kb_get_chat_history, kb_create_chat_session | 复杂问答、答案验证、多步推理 |
+| **Search Agent** | kb_search_knowledge_base, kb_rewrite_query, kb_assemble_context, kb_get_chat_history | 精确检索、多路召回、结果组装 |
+| **Import Agent** | kb_import_file, kb_import_folder, kb_index_document, kb_summarize_document, kb_create_chat_session | 文档导入、索引构建、摘要生成 |
+
+#### API 路由
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/agent/multi/ask` | 多Agent问答（同步） |
+| POST | `/agent/multi/ask/stream` | 多Agent问答（SSE流式） |
+
+#### 请求示例
+
+```bash
+# 同步调用
+curl -X POST http://localhost:8000/agent/multi/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "苹果公司2023年净利润是多少？"}'
+
+# 流式调用
+curl -X POST http://localhost:8000/agent/multi/ask/stream \
+  -H "Content-Type: application/json" \
+  -d '{"question": "苹果公司2023年净利润是多少？"}' \
+  -N
+```
+
+#### SSE 事件类型
+
+```json
+{"type": "supervisor", "task_type": "qa", "target_agents": ["qa"]}
+{"type": "qa_result", "agent": "qa", "success": true, "result": {...}}
+{"type": "final", "answer": "..."}
+{"type": "done"}
+```
+
+#### 与单Agent模式的关系
+
+- **单Agent模式** (`/agent/ask`)：保留现有实现，工具由单一reasoning节点调度
+- **多Agent模式** (`/agent/multi/ask`)：新增，Supervisor自动路由到专业Agent
 
 ---
 
@@ -1102,6 +1200,7 @@ lora:
 | 3.0 | V3 多阶段检索 (section 级 embedding) |
 | 4.0 | V4 答案验证 + 自修正 + 实体记忆 + Human-in-loop |
 | 5.0 | Agent 学习能力：向量记忆(Qdrant) + 工具链记忆(MySQL)；成功问答自动存储、相似问题召回 |
+| **Agent 2.0** | **Multi-Agent 架构：Supervisor + Specialist Agents (QA/Search/Import)，自动意图分类与路由** |
 | Evals 1.0 | 评测系统 (检索 + 回答评分, internal/API 双模式) |
 | Evals 2.0 | Gold 标注流程 (AI 推荐 → 人工审核 → 回填) |
 | Model Serving 1.0 | SFT 模型服务 (Ollama 兼容 + LoRA 动态切换) |

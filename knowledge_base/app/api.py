@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+from typing import Any
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from fastapi.responses import Response
 
 from app.agent.service import agent_ask, agent_ask_stream
 from app.agent.confirmation import ConfirmationRequest, ConfirmationResponse
+from app.agent.multi_agent import run_multi_agent, run_multi_agent_stream
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -214,6 +216,81 @@ def agent_confirm(req: ConfirmationRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Multi-Agent API
+# =============================================================================
+
+class MultiAgentAskRequest(BaseModel):
+    question: str = Field(..., description="User question")
+    session_id: str | None = Field(None, description="Session identifier")
+    max_steps: int = Field(10, description="Maximum agent steps")
+
+
+class MultiAgentAskResponse(BaseModel):
+    ok: bool = True
+    question: str
+    answer: str
+    reasoning_trace: list[dict[str, Any]] = Field(default_factory=list)
+    agent_responses: dict[str, Any] = Field(default_factory=dict)
+    supervisor_decision: dict[str, Any] = Field(default_factory=dict)
+    task_type: str | None = None
+    error: str | None = None
+
+
+@app.post("/agent/multi/ask", response_model=MultiAgentAskResponse)
+def multi_agent_ask(req: MultiAgentAskRequest):
+    """Multi-agent question answering with automatic routing."""
+    from typing import Any
+
+    try:
+        result = run_multi_agent(
+            question=req.question,
+            session_id=req.session_id or "",
+            max_steps=req.max_steps,
+        )
+        return MultiAgentAskResponse(
+            ok=True,
+            question=result.get("question", req.question),
+            answer=result.get("answer", ""),
+            reasoning_trace=result.get("reasoning_trace", []),
+            agent_responses=result.get("agent_responses", {}),
+            supervisor_decision=result.get("supervisor_decision", {}),
+            task_type=result.get("task_type"),
+            error=result.get("error"),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/multi/ask/stream")
+def multi_agent_ask_stream(req: MultiAgentAskRequest):
+    """Multi-agent streaming with automatic routing."""
+    import json
+    from typing import Any
+
+    def generate():
+        try:
+            events = run_multi_agent_stream(
+                question=req.question,
+                session_id=req.session_id or "",
+            )
+            for event in events:
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        yield "data: {\"type\": \"done\"}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/demo")
