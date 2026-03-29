@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from fastapi.responses import Response
 
 from app.agent.service import agent_ask, agent_ask_stream
+from app.agent.confirmation import ConfirmationRequest, ConfirmationResponse
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -194,6 +195,25 @@ def agent_ask_stream_api(req: AgentAskRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/agent/confirm", response_model=ConfirmationResponse)
+def agent_confirm(req: ConfirmationRequest):
+    """Handle user confirmation for high-risk agent operations."""
+    from app.agent.service import handle_agent_confirmation
+
+    try:
+        result = handle_agent_confirmation(
+            session_id=req.session_id,
+            confirmed=req.confirmed,
+            tool_name=req.tool_name,
+            tool_args=req.tool_args,
+        )
+        return ConfirmationResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/demo")

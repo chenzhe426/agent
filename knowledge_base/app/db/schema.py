@@ -110,3 +110,40 @@ def init_schema(cursor) -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """
     )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_entities (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            session_id VARCHAR(128) NOT NULL,
+            entity_type VARCHAR(64) NOT NULL COMMENT 'document|concept|metric|person|company|etc',
+            entity_key VARCHAR(512) NOT NULL COMMENT 'normalized entity name/identifier',
+            display_name VARCHAR(512) NULL,
+            reference_count INT NOT NULL DEFAULT 1,
+            first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            metadata JSON NULL,
+            INDEX idx_agent_entities_session (session_id),
+            INDEX idx_agent_entities_type_key (entity_type, entity_key),
+            INDEX idx_agent_entities_reference (reference_count DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_tool_chains (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            question_hash VARCHAR(64) NOT NULL COMMENT 'SHA256 of normalized question, first 16 chars',
+            question_text TEXT NOT NULL COMMENT 'Full question text for reference',
+            tool_sequence JSON NOT NULL COMMENT '[{tool, args}, ...] - sequence of tools that succeeded',
+            session_id VARCHAR(128) NULL,
+            success_count INT NOT NULL DEFAULT 1 COMMENT 'Number of times this chain succeeded',
+            last_used TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_tool_chains_question_hash (question_hash),
+            INDEX idx_tool_chains_success (success_count DESC),
+            INDEX idx_tool_chains_last_used (last_used)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )

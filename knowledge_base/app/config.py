@@ -240,3 +240,19 @@ V4_NUMERIC_FIRST_FOR_NUMERIC_QUERIES = os.getenv("V4_NUMERIC_FIRST_FOR_NUMERIC_Q
 # =========================
 DATA_DIR = os.getenv("DATA_DIR", "data")
 AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0"))
+
+# =========================
+# Agent 配置
+# =========================
+AGENT_ENABLE_VERIFIER = os.getenv("AGENT_ENABLE_VERIFIER", "true").lower() in {"1", "true", "yes", "on"}
+
+# =========================
+# Agent Memory / Learning
+# =========================
+VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+VECTOR_MEMORY_TOP_K = int(os.getenv("VECTOR_MEMORY_TOP_K", "3"))
+
+TOOL_CHAIN_MEMORY_ENABLED = os.getenv("TOOL_CHAIN_MEMORY_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+TOOL_CHAIN_MEMORY_MIN_SUCCESS = int(os.getenv("TOOL_CHAIN_MEMORY_MIN_SUCCESS", "2"))
+
+QDRANT_MEMORY_COLLECTION = os.getenv("QDRANT_MEMORY_COLLECTION", "kb_memory")
