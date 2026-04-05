@@ -10,8 +10,9 @@ from pydantic import BaseModel, Field
 class TaskType(str, Enum):
     """Task types for agent routing."""
     QA = "qa"                    # Question answering
-    SEARCH = "search"            # Knowledge base search
-    IMPORT = "import"            # Document import/index
+    REWRITE = "rewrite"          # Query rewrite
+    MEMORY = "memory"           # Memory storage/retrieval
+    DOCUMENT = "document"        # Document management/retrieval
     SUMMARY = "summary"          # Document summarization
     CHAT = "chat"                # General chat
     MULTI = "multi"             # Multi-task (requires multiple agents)
@@ -21,8 +22,9 @@ class AgentRole(str, Enum):
     """Agent roles in the system."""
     SUPERVISOR = "supervisor"
     QA = "qa"
-    SEARCH = "search"
-    IMPORT = "import"
+    REWRITE = "rewrite"
+    MEMORY = "memory"
+    DOCUMENT = "document"
     COORDINATOR = "coordinator"
 
 

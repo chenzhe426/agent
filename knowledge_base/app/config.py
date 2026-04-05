@@ -256,3 +256,19 @@ TOOL_CHAIN_MEMORY_ENABLED = os.getenv("TOOL_CHAIN_MEMORY_ENABLED", "true").lower
 TOOL_CHAIN_MEMORY_MIN_SUCCESS = int(os.getenv("TOOL_CHAIN_MEMORY_MIN_SUCCESS", "2"))
 
 QDRANT_MEMORY_COLLECTION = os.getenv("QDRANT_MEMORY_COLLECTION", "kb_memory")
+
+# =========================
+# Redis 配置 (用于中期记忆)
+# =========================
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_DB = int(os.getenv("REDIS_DB", 0))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+
+# =========================
+# MemoryAgent 配置
+# =========================
+MEMORY_SHORT_TERM_TURNS = int(os.getenv("MEMORY_SHORT_TERM_TURNS", "3"))  # 短期记忆保留轮数
+MEMORY_MID_TERM_TTL = int(os.getenv("MEMORY_MID_TERM_TTL", "1800"))       # 中期记忆TTL(秒)，默认30分钟
+MEMORY_MID_TERM_START_TURN = int(os.getenv("MEMORY_MID_TERM_START_TURN", "3"))   # 超过N轮开始中期记忆
+MEMORY_LONG_TERM_START_TURN = int(os.getenv("MEMORY_LONG_TERM_START_TURN", "10"))  # 超过N轮开始长期记忆

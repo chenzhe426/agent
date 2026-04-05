@@ -20,6 +20,10 @@ from app.tools import (
     kb_rewrite_query,
     kb_search_knowledge_base,
     kb_summarize_document,
+    kb_store_memory,
+    kb_get_memory_context,
+    kb_clear_memory,
+    kb_rewrite_query_v2,
 )
 
 
@@ -89,4 +93,29 @@ TOOLS = [
         description="完整 RAG 问答：改写查询 → 检索 → 组装上下文 → 生成答案。输入: question(str), session_id(str,可选), top_k(int,默认5), response_mode(str,默认text), highlight(bool,默认True), use_chat_context(bool,默认True)",
         func=lambda input_data: kb_answer_question(input_data),
     ),
+    # MemoryAgent tools
+    Tool(
+        name="kb_store_memory",
+        description="存储新消息并更新分层记忆。输入: session_id(str), role(str), message(str), metadata(dict,可选)",
+        func=lambda input_data: kb_store_memory(input_data),
+    ),
+    Tool(
+        name="kb_get_memory_context",
+        description="获取分层记忆上下文（供查询改写用）。输入: session_id(str), question(str,可选), include_levels(list,可选)",
+        func=lambda input_data: kb_get_memory_context(input_data),
+    ),
+    Tool(
+        name="kb_clear_memory",
+        description="清除分层记忆。输入: session_id(str), level(str,可选: short/mid/long)",
+        func=lambda input_data: kb_clear_memory(input_data),
+    ),
+    # QueryRewriteAgent tools
+    Tool(
+        name="kb_rewrite_query_v2",
+        description="基于分层记忆的查询改写（新版）。使用MemoryAgent管理的三层记忆改写问题。输入: question(str), session_id(str), use_history(bool,默认True)",
+        func=lambda input_data: kb_rewrite_query_v2(input_data),
+    ),
 ]
+
+# Build TOOL_MAP as dict for document_agent access
+TOOL_MAP = {t.name: t for t in TOOLS}
