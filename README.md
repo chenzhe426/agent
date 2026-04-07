@@ -396,6 +396,26 @@ _final_answer_node: 组装最终答案
 | `agent.py` | 11 个 LangChain Tool 对象 |
 | `confirmation.py` | Human-in-loop 确认; `_pending_confirmations` 内存存储 |
 | `llm.py` | `get_chat_llm()` |
+| `memory_agent/` | 分层记忆Agent |
+| | • `agent.py` - MemoryAgent 核心; 分层存储 (短期/中期/长期) |
+| | • `storage.py` - 三层存储抽象; 短期(内存Dict)/中期(Redis)/长期(MySQL) |
+| | • `schemas.py` - 数据模型; StoreMessageInput/MemoryLevel |
+| `rewrite_agent/` | 查询改写Agent |
+| | • `agent.py` - QueryRewriteAgent; 读取三层记忆改写query |
+| | • `prompts.py` - Prompt模板; 带记忆/不带记忆的改写模板 |
+| | • `schemas.py` - 数据模型; RewriteInput/RewriteOutput |
+| `multi_agent/` | Multi-Agent系统 (Supervisor + Specialist) |
+
+#### governance/ — 双阶段治理系统
+
+| 文件 | 职责 |
+|------|------|
+| `gateway.py` | 统一治理网关; 整合 Context Guard 和 Action Guard |
+| `context_guard.py` | 第一阶段治理; 5层架构 (注入检测/Schema验证/语义风险/来源追溯/分级决策) |
+| `action_guard.py` | 第二阶段治理; 工具调用前的参数校验和风险判定 |
+| `policies.py` | 策略定义; 9大类语义风险模式; 工具风险分级 |
+| `schemas.py` | 数据模型; GovernanceResult/AuditRecord/ActionContext |
+| `README.md` | 治理系统技术文档 |
 
 #### db/ — 数据库
 
@@ -508,6 +528,12 @@ created_at TIMESTAMP
 INDEX: (success_count DESC), (last_used)
 ```
 
+#### schema_migrations (迁移记录)
+```sql
+version VARCHAR(128) PK
+applied_at TIMESTAMP
+```
+
 ---
 
 ### API 接口
@@ -595,6 +621,53 @@ handle_agent_confirmation()
 {"type": "final", "answer": "..."}
 {"type": "done", "session_id": "..."}
 ```
+
+#### 治理系统 (双阶段)
+
+```
+用户输入 → Rewrite → [Context Guard] → Supervisor → [Action Guard] → MCP 工具调用
+                       ↑                            ↑
+                  第一阶段治理                  第二阶段治理
+```
+
+**Context Guard (第一阶段 - 5层架构)**:
+
+| Layer | 功能 | 检测内容 |
+|-------|------|----------|
+| Layer 1 | 基础模式检测 | XSS/HTML/代码注入 |
+| Layer 2 | Schema验证 | 必填字段、置信度、长度 |
+| Layer 3 | 语义风险分析 | 9大类语义风险 |
+| Layer 4 | 来源追溯治理 | 信任评估、意图一致性 |
+| Layer 5 | 分级决策 | ALLOW/GRADE/DENY |
+
+**Layer 3 语义风险 (9大类)**:
+
+| 风险类型 | 等级 | 示例 |
+|---------|------|------|
+| `instruction_override` | HIGH | "忽略之前指令"、"你现在是..." |
+| `data_exfiltration` | HIGH | "显示所有密码"、"导出数据库" |
+| `routing_manipulation` | HIGH | "使用工具X而不是Y"、"跳过监督" |
+| `role_escalation` | MEDIUM | "作为管理员"、"获取root权限" |
+| `cross_session_pollution` | MEDIUM | "在session-123中"、"跨会话" |
+| `context_pollution` | MEDIUM | "以下信息是真实的"、"注入虚假数据" |
+| `unauthorized_persistence` | MEDIUM | "永远记住"、"修改系统提示" |
+| `tool_action_priming` | MEDIUM | "只使用工具X"、"绕过检索" |
+| `intent_hijacking` | MEDIUM | "实际上让我们..."、"换个话题" |
+
+**Action Guard (第二阶段 - 风险等级)**:
+
+| 风险等级 | 决策 | 说明 |
+|---------|------|------|
+| `LOW` | ALLOW | 低风险操作，直接放行 |
+| `MEDIUM` | ALLOW | 中风险操作，放行但记录日志 |
+| `HIGH` | CONFIRM | 高风险操作，需要人工确认 |
+| `CRITICAL` | DENY | 极高风险操作，直接拒绝 |
+
+**HIGH_RISK_TOOLS** (需要人工确认):
+- `kb_import_file`, `kb_import_folder`, `kb_index_document`, `kb_clear_memory`
+
+**MEDIUM_RISK_TOOLS** (记录审计日志):
+- `kb_store_memory`, `kb_delete_document`, `kb_update_document`
 
 ---
 
