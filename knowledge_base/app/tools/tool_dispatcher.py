@@ -9,16 +9,134 @@ tool_dispatcher.py - 统一工具调用分发器
 设计原则：
 1. 所有工具调用必须经过此分发器
 2. Action Guard 在此处统一执行
-3. 不直接暴露 TOOL_MAP 给 Agent
+3. 集成频率限制防止 DDoS
+4. 不直接暴露 TOOL_MAP 给 Agent
 """
 
 from __future__ import annotations
 
+import os
 import time
+from collections import defaultdict
+from threading import Lock
 from typing import Any, Optional
 
 from app.governance.gateway import governance_gateway
 from app.governance.schemas import GovernanceDecision
+from loguru import logger
+
+
+class RateLimiter:
+    """
+    基于滑动窗口的频率限制器
+
+    用于防止恶意提示词注入导致的自我 DDoS 攻击
+    （例如：让 Agent 在循环中疯狂调用工具）
+
+    配置：
+    - SESSION_RATE_LIMIT: 每 session 每窗口的最多调用次数
+    - AGENT_RATE_LIMIT: 每 agent 每窗口的最多调用次数
+    """
+
+    def __init__(
+        self,
+        max_calls: int = 60,
+        window_seconds: int = 60,
+    ):
+        self.max_calls = max_calls
+        self.window_seconds = window_seconds
+        self._calls: dict[str, list[float]] = defaultdict(list)
+        self._lock = Lock()
+
+    def _cleanup(self, key: str, now: float) -> None:
+        """清理过期的调用记录"""
+        self._calls[key] = [
+            t for t in self._calls[key]
+            if now - t < self.window_seconds
+        ]
+
+    def is_allowed(self, key: str) -> tuple[bool, int]:
+        """
+        检查是否允许调用
+
+        Args:
+            key: 限流键（如 session_id 或 agent）
+
+        Returns:
+            (是否允许, 剩余调用次数)
+        """
+        now = time.time()
+
+        with self._lock:
+            self._cleanup(key, now)
+
+            remaining = self.max_calls - len(self._calls[key])
+            if remaining <= 0:
+                return False, 0
+
+            self._calls[key].append(now)
+            return True, remaining - 1
+
+    def get_retry_after(self, key: str) -> int:
+        """获取需要等待的秒数"""
+        now = time.time()
+
+        with self._lock:
+            if key not in self._calls or not self._calls[key]:
+                return 0
+
+            oldest = min(self._calls[key])
+            elapsed = now - oldest
+            if elapsed >= self.window_seconds:
+                return 0
+            return int(self.window_seconds - elapsed)
+
+    def get_usage(self, key: str) -> dict[str, Any]:
+        """获取当前使用情况"""
+        now = time.time()
+
+        with self._lock:
+            self._cleanup(key, now)
+            used = len(self._calls[key])
+            return {
+                "used": used,
+                "remaining": max(0, self.max_calls - used),
+                "limit": self.max_calls,
+                "window_seconds": self.window_seconds,
+            }
+
+
+# 从环境变量读取配置（支持运行时调整）
+def _get_rate_limit_config() -> tuple[int, int, int, int]:
+    """获取频率限制配置"""
+    session_max = int(os.getenv("RATE_LIMIT_SESSION_MAX", "60"))
+    session_window = int(os.getenv("RATE_LIMIT_SESSION_WINDOW", "60"))
+    agent_max = int(os.getenv("RATE_LIMIT_AGENT_MAX", "120"))
+    agent_window = int(os.getenv("RATE_LIMIT_AGENT_WINDOW", "60"))
+    return session_max, session_window, agent_max, agent_window
+
+
+# 全局限流器实例
+_session_limiter: Optional[RateLimiter] = None
+_agent_limiter: Optional[RateLimiter] = None
+
+
+def get_session_limiter() -> RateLimiter:
+    """获取 session 级别限流器"""
+    global _session_limiter
+    if _session_limiter is None:
+        max_calls, window, _, _ = _get_rate_limit_config()
+        _session_limiter = RateLimiter(max_calls=max_calls, window_seconds=window)
+    return _session_limiter
+
+
+def get_agent_limiter() -> RateLimiter:
+    """获取 agent 级别限流器"""
+    global _agent_limiter
+    if _agent_limiter is None:
+        _, _, max_calls, window = _get_rate_limit_config()
+        _agent_limiter = RateLimiter(max_calls=max_calls, window_seconds=window)
+    return _agent_limiter
 
 
 class ToolDispatcher:
@@ -74,7 +192,58 @@ class ToolDispatcher:
                 "meta": {"tool_name": tool_name, "duration_ms": 0},
             }
 
-        # 2. Action Guard 检查
+        # 2. 频率限制检查（防止 DDoS / 恶意提示词注入导致的自我攻击）
+        rate_limit_key = f"{agent}:{session_id}"
+
+        # 2.1 Session 级别限流
+        session_limiter = get_session_limiter()
+        session_allowed, session_remaining = session_limiter.is_allowed(session_id)
+        if not session_allowed:
+            retry_after = session_limiter.get_retry_after(session_id)
+            logger.warning(f"Session rate limit exceeded: session_id={session_id}")
+            return {
+                "ok": False,
+                "error": {
+                    "code": "RATE_LIMIT_SESSION",
+                    "message": f"Session rate limit exceeded. Retry after {retry_after}s",
+                    "retry_after": retry_after,
+                },
+                "meta": {
+                    "tool_name": tool_name,
+                    "duration_ms": int((time.perf_counter() - start_time) * 1000),
+                    "rate_limit": {
+                        "session_remaining": 0,
+                        "session_limit": session_limiter.max_calls,
+                        "session_window": session_limiter.window_seconds,
+                    },
+                },
+            }
+
+        # 2.2 Agent 级别限流
+        agent_limiter = get_agent_limiter()
+        agent_allowed, agent_remaining = agent_limiter.is_allowed(agent)
+        if not agent_allowed:
+            retry_after = agent_limiter.get_retry_after(agent)
+            logger.warning(f"Agent rate limit exceeded: agent={agent}")
+            return {
+                "ok": False,
+                "error": {
+                    "code": "RATE_LIMIT_AGENT",
+                    "message": f"Agent rate limit exceeded. Retry after {retry_after}s",
+                    "retry_after": retry_after,
+                },
+                "meta": {
+                    "tool_name": tool_name,
+                    "duration_ms": int((time.perf_counter() - start_time) * 1000),
+                    "rate_limit": {
+                        "agent_remaining": 0,
+                        "agent_limit": agent_limiter.max_calls,
+                        "agent_window": agent_limiter.window_seconds,
+                    },
+                },
+            }
+
+        # 3. Action Guard 检查
         # 构建 rewrite_output 用于传递风险标记
         rewrite_output = {}
         if governance_context:

@@ -255,14 +255,14 @@ class DocumentAgent:
             )
 
     def _execute_tool(self, tool: Tool, args: dict[str, Any]) -> dict[str, Any]:
-        """执行工具（通过 ToolDispatcher 统一入口）"""
-        # 使用 ToolDispatcher 作为统一入口，所有调用都经过 Action Guard
-        from app.tools.tool_dispatcher import invoke_tool
-
+        """执行工具（优先通过 MCP Client，失败则回退到直接调用）"""
         governance_context = getattr(self, '_governance_context', {})
         session_id = getattr(self, '_session_id', '')
 
-        return invoke_tool(
+        # 优先通过 MCP 调用（所有工具调用都经过 MCP 协议层）
+        from app.tools.mcp_client import call_tool_mcp_or_local
+
+        return call_tool_mcp_or_local(
             tool_name=tool.name,
             args=args,
             agent="document",

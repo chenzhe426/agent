@@ -952,10 +952,10 @@ def multi_signal_recall(
     seen_chunk_ids = set()
 
     for query in queries:
-        # 调用搜索
-        from app.tools.tool_dispatcher import invoke_tool
+        # 调用搜索（优先通过 MCP）
+        from app.tools.mcp_client import call_tool_mcp_or_local
 
-        result = invoke_tool(
+        result = call_tool_mcp_or_local(
             tool_name="kb_search_knowledge_base",
             args={"query": query, "top_k": top_k},
             agent="qa",
@@ -1349,9 +1349,9 @@ class QAAgent:
         query = action_input.get("query", state["rewritten_question"])
         top_k = action_input.get("top_k", 20)
 
-        from app.tools.tool_dispatcher import invoke_tool
+        from app.tools.mcp_client import call_tool_mcp_or_local
 
-        result = invoke_tool(
+        result = call_tool_mcp_or_local(
             tool_name="kb_search_knowledge_base",
             args={"query": query, "top_k": top_k},
             agent="qa",
@@ -1398,7 +1398,7 @@ class QAAgent:
 
     def _execute_generate_answer(self, action_input: dict, state: QAAgentState, tool_map: dict) -> dict[str, Any]:
         """生成答案"""
-        from app.tools.tool_dispatcher import invoke_tool
+        from app.tools.mcp_client import call_tool_mcp_or_local
 
         question = action_input.get("question", state["rewritten_question"])
         context = action_input.get("context", "")
@@ -1407,7 +1407,7 @@ class QAAgent:
         if not context:
             chunks = state["reranked_chunks"] or state["retrieved_chunks"]
             if chunks:
-                assemble_result = invoke_tool(
+                assemble_result = call_tool_mcp_or_local(
                     tool_name="kb_assemble_context",
                     args={"hits": chunks, "max_chunks": 6},
                     agent="qa",
@@ -1417,7 +1417,7 @@ class QAAgent:
                 context = assemble_result.get("context", "")
 
         # 调用生成答案
-        result = invoke_tool(
+        result = call_tool_mcp_or_local(
             tool_name="kb_generate_answer",
             args={
                 "question": question,

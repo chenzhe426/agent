@@ -15,6 +15,13 @@ from app.tools.rewrite_tools import kb_rewrite_query_v2
 # Tool dispatcher - 统一工具调用入口（所有工具调用必须经过此入口）
 from app.tools.tool_dispatcher import tool_dispatcher, invoke_tool, check_tool_guard
 
+# MCP Client - Agent 通过 MCP 协议调用工具
+from app.tools.mcp_client import (
+    mcp_client_manager,
+    call_tool_mcp_or_local,
+    is_mcp_available,
+)
+
 __all__ = [
     # Import tools
     "kb_import_file",
@@ -39,4 +46,8 @@ __all__ = [
     "tool_dispatcher",
     "invoke_tool",
     "check_tool_guard",
+    # MCP Client - Agent 通过 MCP 调用
+    "mcp_client_manager",
+    "call_tool_mcp_or_local",
+    "is_mcp_available",
 ]

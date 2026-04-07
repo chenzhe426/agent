@@ -8,15 +8,19 @@ governance/action_guard.py - 动作治理（Action Guard）
 2. 权限判断
 3. 参数 schema 校验
 4. 风险等级判定
-5. 审计日志记录
+5. 审计日志记录（输出到外部存储）
 6. 高风险动作钩子（人工确认）
 7. 状态写入和资源访问治理
 """
 
 from __future__ import annotations
 
+import json
+import os
 import time
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from app.governance.schemas import (
@@ -37,6 +41,106 @@ from app.governance.policies import (
     check_injection_risk,
     check_sensitive_action,
 )
+from loguru import logger
+
+
+class AuditLogger:
+    """
+    审计日志输出器
+
+    将审计记录输出到文件（JSONL 格式），支持：
+    1. 本地文件存储
+    2. 可配置日志目录
+    3. 自动按日期分割
+    """
+
+    def __init__(self, log_dir: Optional[str] = None):
+        self.log_dir = log_dir or os.getenv("AUDIT_LOG_DIR", "logs/audit")
+        self._ensure_log_dir()
+
+    def _ensure_log_dir(self) -> None:
+        """确保日志目录存在"""
+        Path(self.log_dir).mkdir(parents=True, exist_ok=True)
+
+    def _get_log_path(self) -> str:
+        """获取当日志文件路径"""
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        return os.path.join(self.log_dir, f"audit_{date_str}.jsonl")
+
+    def log(self, record: AuditRecord) -> None:
+        """
+        输出审计日志到文件
+
+        Args:
+            record: 审计记录
+        """
+        try:
+            log_path = self._get_log_path()
+
+            # 将 record 转换为字典
+            record_dict = {
+                "timestamp": record.timestamp,
+                "session_id": record.session_id,
+                "tenant_id": record.tenant_id,
+                "operation": record.operation.value if hasattr(record.operation, 'value') else str(record.operation),
+                "operation_detail": record.operation_detail,
+                "decision": record.decision.value if hasattr(record.decision, 'value') else str(record.decision),
+                "risk_level": record.risk_level.value if hasattr(record.risk_level, 'value') else str(record.risk_level),
+                "user_input": record.user_input,
+                "rewritten_query": record.rewritten_query,
+                "agent": record.agent,
+                "tool_name": record.tool_name,
+                "tool_args": self._sanitize_args(record.tool_args),
+                "success": record.success,
+                "error_message": record.error_message,
+                "risk_flags": record.risk_flags,
+            }
+
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record_dict, ensure_ascii=False) + "\n")
+
+            logger.debug(f"Audit log written: {record.operation_detail} by {record.agent}")
+
+        except Exception as e:
+            # 日志写入失败不影响主流程，只记录错误
+            logger.error(f"Failed to write audit log: {e}")
+
+    def _sanitize_args(self, args: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        """
+        脱敏工具参数中的敏感信息
+
+        Args:
+            args: 原始工具参数
+
+        Returns:
+            脱敏后的参数
+        """
+        if not args:
+            return args
+
+        # 敏感字段列表
+        sensitive_keys = {"password", "token", "api_key", "secret", "credential", "auth"}
+
+        sanitized = {}
+        for key, value in args.items():
+            if any(s in key.lower() for s in sensitive_keys):
+                sanitized[key] = "***REDACTED***"
+            else:
+                sanitized[key] = value
+
+        return sanitized
+
+
+# 全局审计日志器实例
+_audit_logger: Optional[AuditLogger] = None
+
+
+def get_audit_logger() -> AuditLogger:
+    """获取全局审计日志器实例"""
+    global _audit_logger
+    if _audit_logger is None:
+        _audit_logger = AuditLogger()
+    return _audit_logger
 
 
 class ActionGuard:
@@ -287,7 +391,7 @@ class ActionGuard:
         operation_detail: str,
         error_message: Optional[str] = None,
     ) -> None:
-        """记录审计日志"""
+        """记录审计日志（内存 + 外部文件）"""
         record = AuditRecord(
             timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             session_id=action_context.session_id,
@@ -305,7 +409,16 @@ class ActionGuard:
             error_message=error_message,
             risk_flags=risk_flags,
         )
+
+        # 1. 保存到内存列表（用于程序查询）
         self._audit_records.append(record)
+
+        # 2. 输出到外部文件（用于持久化审计）
+        try:
+            audit_logger = get_audit_logger()
+            audit_logger.log(record)
+        except Exception as e:
+            logger.warning(f"Failed to write external audit log: {e}")
 
     def get_audit_records(self, session_id: Optional[str] = None) -> list[AuditRecord]:
         """获取审计记录"""

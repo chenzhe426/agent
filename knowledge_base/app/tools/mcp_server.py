@@ -177,7 +177,7 @@ def mcp_answer_question(
         "highlight": highlight,
         "use_chat_context": use_chat_context,
     }
-    result = call_tool_via_dispatcher("kb_answer_question", kb_answer_question, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_answer_question", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -195,7 +195,7 @@ def mcp_rewrite_query(
         "session_id": session_id,
         "use_history": use_history,
     }
-    result = call_tool_via_dispatcher("kb_rewrite_query", kb_rewrite_query, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_rewrite_query", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -211,7 +211,7 @@ def mcp_assemble_context(
         "hits": hits,
         "max_chunks": max_chunks,
     }
-    result = call_tool_via_dispatcher("kb_assemble_context", kb_assemble_context, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_assemble_context", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -231,7 +231,7 @@ def mcp_generate_answer(
         "history_text": history_text,
         "response_mode": response_mode,
     }
-    result = call_tool_via_dispatcher("kb_generate_answer", kb_generate_answer, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_generate_answer", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -248,7 +248,7 @@ def mcp_import_file(
 ) -> str:
     """导入单个文档文件（PDF、DOCX、TXT、MD）到知识库。"""
     tool_args = {"file_path": file_path}
-    result = call_tool_via_dispatcher("kb_import_file", kb_import_file, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_import_file", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -260,7 +260,7 @@ def mcp_import_folder(
 ) -> str:
     """批量导入文件夹中的所有文档到知识库。"""
     tool_args = {"folder": folder}
-    result = call_tool_via_dispatcher("kb_import_folder", kb_import_folder, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_import_folder", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -278,7 +278,7 @@ def mcp_index_document(
         "chunk_size": chunk_size,
         "overlap": overlap,
     }
-    result = call_tool_via_dispatcher("kb_index_document", kb_index_document, tool_args, governance_session_id)
+    result = call_tool_via_dispatcher("kb_index_document", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -286,9 +286,11 @@ def mcp_index_document(
 @mcp.tool(name="kb_summarize_document")
 def mcp_summarize_document(
     document_id: int = Field(..., ge=1, description="Document ID to summarize."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """根据 document_id 对指定文档做摘要。"""
-    result = kb_summarize_document({"document_id": document_id})
+    tool_args = {"document_id": document_id}
+    result = call_tool_via_dispatcher("kb_summarize_document", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -303,13 +305,15 @@ def mcp_create_chat_session(
     session_id: Optional[str] = Field(None, description="Optional session ID (generated if not provided)."),
     title: Optional[str] = Field(None, description="Optional session title."),
     metadata: dict = Field(default_factory=dict, description="Optional metadata."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """创建一个新的聊天会话。"""
-    result = kb_create_chat_session({
+    tool_args = {
         "session_id": session_id,
         "title": title,
         "metadata": metadata,
-    })
+    }
+    result = call_tool_via_dispatcher("kb_create_chat_session", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -318,12 +322,14 @@ def mcp_create_chat_session(
 def mcp_get_chat_history(
     session_id: str = Field(..., description="Session ID to get history for."),
     limit: int = Field(20, ge=1, le=100, description="Maximum number of messages to return."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """根据 session_id 获取历史对话消息。"""
-    result = kb_get_chat_history({
+    tool_args = {
         "session_id": session_id,
         "limit": limit,
-    })
+    }
+    result = call_tool_via_dispatcher("kb_get_chat_history", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -339,14 +345,16 @@ def mcp_store_memory(
     role: str = Field(..., description="Role: 'user' or 'assistant'."),
     message: str = Field(..., description="Message content."),
     metadata: Optional[dict] = Field(None, description="Optional metadata."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """存储新消息并更新分层记忆。"""
-    result = kb_store_memory({
+    tool_args = {
         "session_id": session_id,
         "role": role,
         "message": message,
         "metadata": metadata or {},
-    })
+    }
+    result = call_tool_via_dispatcher("kb_store_memory", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -356,14 +364,16 @@ def mcp_get_memory_context(
     session_id: str = Field(..., description="Session ID."),
     question: Optional[str] = Field(None, description="Optional question for long-term memory retrieval."),
     include_levels: Optional[list[str]] = Field(None, description="Levels to retrieve: ['short', 'mid', 'long']."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """获取分层记忆上下文（供查询改写用）。"""
     levels = [MemoryLevel(l) for l in (include_levels or ["short", "mid", "long"])]
-    result = kb_get_memory_context({
+    tool_args = {
         "session_id": session_id,
         "question": question,
         "include_levels": levels,
-    })
+    }
+    result = call_tool_via_dispatcher("kb_get_memory_context", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -372,12 +382,14 @@ def mcp_get_memory_context(
 def mcp_clear_memory(
     session_id: str = Field(..., description="Session ID."),
     level: Optional[str] = Field(None, description="Level to clear: 'short', 'mid', 'long', or None for all."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """清除分层记忆。"""
-    result = kb_clear_memory({
+    tool_args = {
         "session_id": session_id,
         "level": level,
-    })
+    }
+    result = call_tool_via_dispatcher("kb_clear_memory", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
@@ -387,13 +399,15 @@ def mcp_rewrite_query_v2(
     question: str = Field(..., min_length=1, description="User question to rewrite."),
     session_id: str = Field(..., description="Session ID."),
     use_history: bool = Field(True, description="Whether to use chat history."),
+    governance_session_id: str = Field("default", description="Session ID for governance tracking."),
 ) -> str:
     """基于分层记忆的查询改写（新版）。使用MemoryAgent管理的三层记忆改写问题。"""
-    result = kb_rewrite_query_v2({
+    tool_args = {
         "question": question,
         "session_id": session_id,
         "use_history": use_history,
-    })
+    }
+    result = call_tool_via_dispatcher("kb_rewrite_query_v2", tool_args, governance_session_id, "mcp")
     adapted = adapt_tool_result(result)
     return adapted.content[0].text if adapted.content else str(result)
 
